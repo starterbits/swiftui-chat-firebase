@@ -1,0 +1,132 @@
+//
+//  ChatDetailedView.swift
+//  ChatApp
+//
+//  Created by iOS App Templates on 03/08/20.
+//  Copyright © 2020 iOS App Templates. All rights reserved.
+//
+
+import SwiftUI
+
+struct ChatDetailedView: View {
+    var user: UserData
+    @ObservedObject var state: AppState
+    @State var messages = [Message]()
+    @State var write = ""
+    @Environment(\.imageCache) var cache: ImageCache
+    @State private var showingActionSheet = false
+    @State private var showingImagePicker = false
+    @State private var inputImage : UIImage?
+    @State var image : Image?
+
+    @State private var sourceType : UIImagePickerController.SourceType = .photoLibrary
+
+    @ObservedObject private var keyboard = KeyboardInfo.shared
+    
+    
+    var body: some View {
+        VStack {
+            ScrollView(.vertical, showsIndicators: false){
+                VStack(alignment: .center){
+                    ForEach(messages, id:\.self) { message in
+                        ChatMessageView(message: message,
+                                        uid: self.state.uid)
+                            .padding(.vertical,6)
+                    }
+                }.frame(width: 374)
+            }
+            
+            HStack {
+                cameraButtton
+                TextField("Aa",text: self.$write).padding(10)
+                    .background(Color(red: 233.0/255, green: 234.0/255, blue: 243.0/255))
+                .cornerRadius(25)
+                
+                Button(action: {
+                    if self.write.count > 0 {
+                        self.state.sendData(user: self.user, message: self.write)
+                        self.write = ""
+                    } else {
+                        
+                    }
+                }) {
+                    Image(systemName: "paperplane.fill").font(.system(size: 20))
+                        .foregroundColor((self.write.count > 0) ? Color.blue : Color.gray)
+                        .rotationEffect(.degrees(50))
+                    
+                }
+            }.padding()
+             .padding(.bottom, self.keyboard.keyboardIsUp ? 300 :0)
+            }.navigationBarTitle(Text(""), displayMode: .inline)
+        .navigationBarItems(leading: titleBar)
+        .onAppear(perform: getMessages)
+        .sheet(isPresented: $showingImagePicker,onDismiss: loadImage){
+                ImagePicker(image: self.$inputImage, source: self.sourceType)
+            }
+        .actionSheet(isPresented: $showingActionSheet) {
+             ActionSheet(title: Text(""), buttons: [
+                 .default(Text("Choose Photo")) {
+                     self.sourceType = .photoLibrary
+                     self.showingImagePicker = true
+                 },
+                 .default(Text("Take Photo")) {
+                     self.sourceType = .camera
+                     self.showingImagePicker = true
+                 },
+                 .cancel()
+             ])
+         }
+        
+    }
+    
+    private var titleBar: some View {
+        HStack{
+        AsyncImage(
+            url: URL(string: user.profileImageUrl ?? ""),
+            cache: cache,
+            placeholder: Image(systemName: "person.fill"),
+            configuration: { $0.resizable().renderingMode(.original) }
+        )
+            .aspectRatio(contentMode: .fit)
+            .frame(idealHeight: 30 )
+            .clipShape(Circle())
+            .onTapGesture {
+                
+            }
+            Text(user.name ?? "").fontWeight(.medium)
+        }.padding(.leading,30)
+    }
+    
+    private var cameraButtton : Button<Image> {
+        return Button(action: {
+            self.showingActionSheet = true
+        }){
+            Image(systemName: "camera")
+        }
+    }
+
+    
+    func loadImage(){
+        guard let image = inputImage  else { return}
+        state.uplaodImage(image) { (url) in
+            self.state.sendData(user: self.user,
+                                message: "IMAGE", imageUrl: url)
+        }
+    }
+    
+    func getMessages(){
+        state.observeMessages { (dictionary,id) in
+            var message = Message()
+             if let text = dictionary["text"]{ message.text = (text as! String) }
+             if let imageUrl = dictionary["imageUrl"]{ message.imageUrl = (imageUrl as? String) }
+             message.fromId = (dictionary["fromId"] as! String)
+             message.toId = (dictionary["toId"] as! String)
+             message.timestamp = (dictionary["timestamp"] as! Int)
+            if message.chatPatnerId() == self.user.id {
+                self.messages.append(message)
+                }
+        }
+    }
+}
+
+
